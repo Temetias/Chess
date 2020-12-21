@@ -8,8 +8,7 @@ import {
   boardPositionToId,
   Piece,
   INITIAL_GAME_STATE,
-  moveIsAllowed,
-  calculateNextBoardstate,
+  calculateNextGamestate,
 } from "./game";
 
 const BOARD_POSITIONS = flatten(
@@ -101,7 +100,7 @@ const Board: React.FC = () => {
                 : null;
               if (activePieceData) {
                 setCurrentGameState(
-                  calculateNextBoardstate(
+                  calculateNextGamestate(
                     {
                       ...activePieceData,
                       boardPosition: boardIdToPosition(activePiece!),

@@ -32,7 +32,7 @@ export type GameState = {
   turn: Side;
   winner: Side | null;
   boardState: Record<string, Piece | undefined>;
-  check: false;
+  check: boolean;
 };
 
 const twice = (step: Step): Move => [step, step];
@@ -299,10 +299,42 @@ const threatensKing = (pieceData: PieceData, gameState: GameState) => {
       targetPiece.side !== pieceData.side &&
       targetPiece.type === "king"
     ) {
+      console.log("THREAT", gameState);
       return true;
     }
   }
   return false;
+};
+
+const openCheckCheck = (gameState: GameState) => (pieceData: PieceData) => (
+  move: Move
+) => {
+  const projectedBoardState = projectBoardState(
+    pieceData,
+    gameState,
+    calculateMove(pieceData.boardPosition)(move)
+  );
+  const projectedGameState: GameState = {
+    ...gameState,
+    boardState: projectedBoardState,
+  };
+  return Object.keys(projectedBoardState)
+    .filter(
+      (boardPositionId) =>
+        projectedBoardState[boardPositionId] &&
+        projectedBoardState[boardPositionId]?.side !== pieceData.side
+    )
+    .filter((boardPositionId) =>
+      threatensKing(
+        {
+          ...projectedBoardState[boardPositionId]!,
+          boardPosition: boardIdToPosition(boardPositionId),
+        },
+        projectedGameState
+      )
+    ).length
+    ? null
+    : move;
 };
 
 export const moveIsAllowed = (
@@ -310,30 +342,43 @@ export const moveIsAllowed = (
   gameState: GameState,
   targetBoardPosition: BoardPosition
 ) =>
-  getAllowedMoves(pieceData, gameState)
+  (getAllowedMoves(pieceData, gameState)
+    .map(openCheckCheck(gameState)(pieceData))
+    .filter((move) => !!move) as Move[])
     .map(calculateMove(pieceData.boardPosition))
     .map(boardPositionToId)
     .includes(boardPositionToId(targetBoardPosition));
 
-export const calculateNextBoardstate = (
+const projectBoardState = (
+  pieceData: PieceData,
+  gameState: GameState,
+  targetBoardPosition: BoardPosition
+): GameState["boardState"] => {
+  const currentBoardPositionId = boardPositionToId(pieceData.boardPosition);
+  return {
+    ...gameState.boardState,
+    [boardPositionToId(targetBoardPosition)]: {
+      ...gameState.boardState[currentBoardPositionId]!,
+      hasMoved: true,
+    },
+    [currentBoardPositionId]: undefined,
+  };
+};
+
+export const calculateNextGamestate = (
   pieceData: PieceData,
   gameState: GameState,
   targetBoardPosition: BoardPosition
 ): GameState =>
   moveIsAllowed(pieceData, gameState, targetBoardPosition)
     ? {
-        turn: gameState.turn === "black" ? "white" : "black",
-        winner: null,
+        boardState: projectBoardState(
+          pieceData,
+          gameState,
+          targetBoardPosition
+        ),
         check: false,
-        boardState: {
-          ...gameState.boardState,
-          [boardPositionToId(targetBoardPosition)]: {
-            ...gameState.boardState[
-              boardPositionToId(pieceData.boardPosition)
-            ]!,
-            hasMoved: true,
-          },
-          [boardPositionToId(pieceData.boardPosition)]: undefined,
-        },
+        winner: null,
+        turn: gameState.turn === "black" ? "white" : "black",
       }
     : gameState;
