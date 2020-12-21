@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./App.css";
 import {
   BoardPosition,
@@ -78,6 +78,33 @@ const Board: React.FC = () => {
   const [currentGameState, setCurrentGameState] = useState<GameState>(
     INITIAL_GAME_STATE
   );
+
+  const onPieceClick = (piece: Piece, boardPositionId: string) =>
+    currentGameState.turn === piece.side
+      ? setActivePiece(boardPositionId)
+      : null;
+
+  const onBoardSquareClick = (boardPosition: BoardPosition) => {
+    const activePieceData = activePiece
+      ? currentGameState.boardState[activePiece]
+      : null;
+    if (activePieceData) {
+      const nextGameState = calculateNextGamestate(
+        {
+          ...activePieceData,
+          boardPosition: boardIdToPosition(activePiece!),
+        },
+        currentGameState,
+        boardPosition
+      );
+      setCurrentGameState(nextGameState);
+      if (nextGameState.check) {
+        alert("Check");
+      }
+      setActivePiece(null);
+    }
+  };
+
   return (
     <div className="Board-wrap">
       {[X_MARKINGS, Y_MARKINGS].map(([axis, marks]) => (
@@ -94,24 +121,7 @@ const Board: React.FC = () => {
           <BoardSquare
             key={boardPositionToId(boardPosition)}
             boardPosition={boardPosition}
-            onClick={(boardPosition: BoardPosition) => {
-              const activePieceData = activePiece
-                ? currentGameState.boardState[activePiece]
-                : null;
-              if (activePieceData) {
-                setCurrentGameState(
-                  calculateNextGamestate(
-                    {
-                      ...activePieceData,
-                      boardPosition: boardIdToPosition(activePiece!),
-                    },
-                    currentGameState,
-                    boardPosition
-                  )
-                );
-                setActivePiece(null);
-              }
-            }}
+            onClick={onBoardSquareClick}
           />
         ))}
         {Object.keys(currentGameState.boardState).map((boardPositionId) => {
@@ -121,11 +131,7 @@ const Board: React.FC = () => {
               key={boardPositionId}
               active={boardPositionId === activePiece}
               clickable={currentGameState.turn === piece.side}
-              onClick={() =>
-                currentGameState.turn === piece.side
-                  ? setActivePiece(boardPositionId)
-                  : null
-              }
+              onClick={() => onPieceClick(piece, boardPositionId)}
               boardPositionId={boardPositionId}
               {...piece}
             />

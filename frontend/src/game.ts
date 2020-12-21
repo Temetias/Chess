@@ -299,42 +299,41 @@ const threatensKing = (pieceData: PieceData, gameState: GameState) => {
       targetPiece.side !== pieceData.side &&
       targetPiece.type === "king"
     ) {
-      console.log("THREAT", gameState);
       return true;
     }
   }
   return false;
 };
 
-const openCheckCheck = (gameState: GameState) => (pieceData: PieceData) => (
-  move: Move
-) => {
-  const projectedBoardState = projectBoardState(
-    pieceData,
-    gameState,
-    calculateMove(pieceData.boardPosition)(move)
-  );
-  const projectedGameState: GameState = {
-    ...gameState,
-    boardState: projectedBoardState,
-  };
-  return Object.keys(projectedBoardState)
+const checkCheck = (gameState: GameState, side: Side) =>
+  Object.keys(gameState.boardState)
     .filter(
       (boardPositionId) =>
-        projectedBoardState[boardPositionId] &&
-        projectedBoardState[boardPositionId]?.side !== pieceData.side
+        gameState.boardState[boardPositionId] &&
+        gameState.boardState[boardPositionId]?.side !== side
     )
     .filter((boardPositionId) =>
       threatensKing(
         {
-          ...projectedBoardState[boardPositionId]!,
+          ...gameState.boardState[boardPositionId]!,
           boardPosition: boardIdToPosition(boardPositionId),
         },
-        projectedGameState
+        gameState
       )
-    ).length
-    ? null
-    : move;
+    ).length > 0;
+
+const openCheckCheck = (gameState: GameState, pieceData: PieceData) => (
+  move: Move
+) => {
+  const projectedGameState: GameState = {
+    ...gameState,
+    boardState: projectBoardState(
+      pieceData,
+      gameState,
+      calculateMove(pieceData.boardPosition)(move)
+    ),
+  };
+  return checkCheck(projectedGameState, pieceData.side) ? null : move;
 };
 
 export const moveIsAllowed = (
@@ -343,7 +342,7 @@ export const moveIsAllowed = (
   targetBoardPosition: BoardPosition
 ) =>
   (getAllowedMoves(pieceData, gameState)
-    .map(openCheckCheck(gameState)(pieceData))
+    .map(openCheckCheck(gameState, pieceData))
     .filter((move) => !!move) as Move[])
     .map(calculateMove(pieceData.boardPosition))
     .map(boardPositionToId)
@@ -365,20 +364,53 @@ const projectBoardState = (
   };
 };
 
+const getPiecesOfColor = (
+  boardState: GameState["boardState"],
+  side: Side
+): PieceData[] =>
+  Object.keys(boardState)
+    .filter(
+      (boardPositionId) =>
+        boardState[boardPositionId] &&
+        boardState[boardPositionId]?.side === side
+    )
+    .map((boardPositionId) => ({
+      ...boardState[boardPositionId],
+      boardPosition: boardIdToPosition(boardPositionId),
+    })) as PieceData[];
+
+const notPlayingSide = ({ turn }: GameState): Side =>
+  turn === "black" ? "white" : "black";
+
+const checkLose = (gameState: GameState) =>
+  getPiecesOfColor(gameState.boardState, notPlayingSide(gameState))
+    .map((pieceData) => getAllowedMoves(pieceData, gameState))
+    .flat().length === 0;
+
 export const calculateNextGamestate = (
   pieceData: PieceData,
   gameState: GameState,
   targetBoardPosition: BoardPosition
-): GameState =>
-  moveIsAllowed(pieceData, gameState, targetBoardPosition)
-    ? {
-        boardState: projectBoardState(
+): GameState => {
+  return moveIsAllowed(pieceData, gameState, targetBoardPosition)
+    ? (() => {
+        const projectedBoardState = projectBoardState(
           pieceData,
           gameState,
           targetBoardPosition
-        ),
-        check: false,
-        winner: null,
-        turn: gameState.turn === "black" ? "white" : "black",
-      }
+        );
+        return {
+          boardState: projectedBoardState,
+          check: checkCheck(
+            {
+              ...gameState,
+              boardState: projectedBoardState,
+            },
+            notPlayingSide(gameState)
+          ),
+          winner: checkLose(gameState) ? gameState.turn : null,
+          turn: notPlayingSide(gameState),
+        };
+      })()
     : gameState;
+};
