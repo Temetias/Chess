@@ -9,6 +9,7 @@ import {
   Piece,
   INITIAL_GAME_STATE,
   moveIsAllowed,
+  calculateNextBoardstate,
 } from "./game";
 
 const BOARD_POSITIONS = flatten(
@@ -98,30 +99,17 @@ const Board: React.FC = () => {
               const activePieceData = activePiece
                 ? currentGameState.boardState[activePiece]
                 : null;
-              if (
-                activePieceData &&
-                moveIsAllowed(
-                  {
-                    type: activePieceData.type,
-                    boardPosition: boardIdToPosition(activePiece!),
-                    side: activePieceData.side,
-                  },
-                  currentGameState,
-                  boardPosition
-                )
-              ) {
-                setCurrentGameState({
-                  winner: null,
-                  turn: currentGameState.turn === "white" ? "black" : "white",
-                  boardState: {
-                    ...currentGameState.boardState,
-                    [boardPositionToId(boardPosition)]: {
+              if (activePieceData) {
+                setCurrentGameState(
+                  calculateNextBoardstate(
+                    {
                       ...activePieceData,
-                      hasMoved: true,
+                      boardPosition: boardIdToPosition(activePiece!),
                     },
-                    [activePiece!]: undefined,
-                  },
-                });
+                    currentGameState,
+                    boardPosition
+                  )
+                );
                 setActivePiece(null);
               }
             }}

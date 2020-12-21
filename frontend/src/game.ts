@@ -32,6 +32,7 @@ export type GameState = {
   turn: Side;
   winner: Side | null;
   boardState: Record<string, Piece | undefined>;
+  check: false;
 };
 
 const twice = (step: Step): Move => [step, step];
@@ -82,8 +83,8 @@ const calculateStep = ([xStep, yStep]: Step) => ([
   (yPos + yStep) as BoardCoordinate,
 ];
 
-const calculateMove = (move: Move) => (
-  boardPosition: BoardPosition
+const calculateMove = (boardPosition: BoardPosition) => (
+  move: Move
 ): BoardPosition =>
   move.reduce((acc, cur) => calculateStep(cur)(acc), boardPosition);
 
@@ -100,13 +101,16 @@ const ifIsFirstMove = (move: Move) => ({ boardState }: GameState) => ({
     ? move
     : null;
 
-const ifEats = (move: Move) => ({ boardState }: GameState) => ({
+const getTargetPiece = ({ boardState }: GameState) => ({
   boardPosition,
-  side,
-}: PieceData) => {
-  const targetPiece =
-    boardState[boardPositionToId(calculateMove(move)(boardPosition))];
-  return !!targetPiece && targetPiece.side !== side ? move : null;
+}: PieceData) => (move: Move) =>
+  boardState[boardPositionToId(calculateMove(boardPosition)(move))];
+
+const ifEats = (move: Move) => (gameState: GameState) => (
+  pieceData: PieceData
+) => {
+  const targetPiece = getTargetPiece(gameState)(pieceData)(move);
+  return !!targetPiece && targetPiece.side !== pieceData.side ? move : null;
 };
 
 const ifNotEats = (move: Move) => (gameState: GameState) => (
@@ -144,14 +148,14 @@ const ifNotPopulated = (move: Move) => ({ boardState }: GameState) => ({
   side,
 }: PieceData) => {
   const targetPiece =
-    boardState[boardPositionToId(calculateMove(move)(boardPosition))];
+    boardState[boardPositionToId(calculateMove(boardPosition)(move))];
   return targetPiece && targetPiece.side === side ? null : move;
 };
 
 const insideBoard = (move: Move) => (_: GameState) => ({
   boardPosition,
 }: PieceData): Move | null => {
-  const [xTarget, yTarget] = calculateMove(move)(boardPosition);
+  const [xTarget, yTarget] = calculateMove(boardPosition)(move);
   return xTarget > 7 || yTarget > 7 || xTarget < 0 || yTarget < 0 ? null : move;
 };
 
@@ -279,12 +283,27 @@ export const INITIAL_GAME_STATE: GameState = {
   },
   turn: "white",
   winner: null,
+  check: false,
 };
 
 export const getAllowedMoves = (pieceData: PieceData, gameState: GameState) =>
   PIECE_MOVE_CHECKS[pieceData.type]
-    .map((check) => check(gameState)(pieceData))
+    .map((moveCheck) => moveCheck(gameState)(pieceData))
     .filter((move) => !!move) as Move[];
+
+const threatensKing = (pieceData: PieceData, gameState: GameState) => {
+  for (const move of getAllowedMoves(pieceData, gameState)) {
+    const targetPiece = getTargetPiece(gameState)(pieceData)(move);
+    if (
+      targetPiece &&
+      targetPiece.side !== pieceData.side &&
+      targetPiece.type === "king"
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
 
 export const moveIsAllowed = (
   pieceData: PieceData,
@@ -292,6 +311,29 @@ export const moveIsAllowed = (
   targetBoardPosition: BoardPosition
 ) =>
   getAllowedMoves(pieceData, gameState)
-    .map((move) => calculateMove(move)(pieceData.boardPosition))
+    .map(calculateMove(pieceData.boardPosition))
     .map(boardPositionToId)
     .includes(boardPositionToId(targetBoardPosition));
+
+export const calculateNextBoardstate = (
+  pieceData: PieceData,
+  gameState: GameState,
+  targetBoardPosition: BoardPosition
+): GameState =>
+  moveIsAllowed(pieceData, gameState, targetBoardPosition)
+    ? {
+        turn: gameState.turn === "black" ? "white" : "black",
+        winner: null,
+        check: false,
+        boardState: {
+          ...gameState.boardState,
+          [boardPositionToId(targetBoardPosition)]: {
+            ...gameState.boardState[
+              boardPositionToId(pieceData.boardPosition)
+            ]!,
+            hasMoved: true,
+          },
+          [boardPositionToId(pieceData.boardPosition)]: undefined,
+        },
+      }
+    : gameState;
