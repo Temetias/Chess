@@ -8,11 +8,7 @@ import {
   boardPositionToId,
   Piece,
   INITIAL_GAME_STATE,
-  Move,
-  PIECE_MOVE_CHECKS,
-  PieceData,
   moveIsAllowed,
-  getAllowedMoves,
 } from "./game";
 
 const BOARD_POSITIONS = flatten(
@@ -65,10 +61,17 @@ const BoardSquare: React.FC<{
     }`}
     onClick={() => onClick(boardPosition)}
     style={boardPositionToCssPosition(boardPosition)}
-  >
-    {boardPositionToId(boardPosition)}
-  </div>
+  ></div>
 );
+
+const X_MARKINGS = ["x", ["A", "B", "C", "D", "E", "F", "G", "H"]] as [
+  string,
+  string[]
+];
+const Y_MARKINGS = ["y", ["8", "7", "6", "5", "4", "3", "2", "1"]] as [
+  string,
+  string[]
+];
 
 const Board: React.FC = () => {
   const [activePiece, setActivePiece] = useState<string | null>(null);
@@ -77,6 +80,15 @@ const Board: React.FC = () => {
   );
   return (
     <div className="Board-wrap">
+      {[X_MARKINGS, Y_MARKINGS].map(([axis, marks]) => (
+        <div className={`Board-edge Board-edge--${axis}`} key={axis}>
+          {marks.map((mark) => (
+            <div className="Board-edge-item" key={mark}>
+              {mark}
+            </div>
+          ))}
+        </div>
+      ))}
       <div className="Board">
         {BOARD_POSITIONS.map((boardPosition) => (
           <BoardSquare
