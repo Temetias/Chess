@@ -398,13 +398,8 @@ export const calculateNextGamestate = (
   pieceData: PieceData,
   gameState: GameState,
   targetBoardPosition: BoardPosition
-): GameState => {
-  console.log(
-    getPiecesOfColor(gameState.boardState, notPlayingSide(gameState))
-      .map((pieceData) => getAllowedMoves(pieceData, gameState))
-      .flat()
-  );
-  return moveIsAllowed(pieceData, gameState, targetBoardPosition)
+): GameState =>
+  moveIsAllowed(pieceData, gameState, targetBoardPosition)
     ? (() => {
         const projectedBoardState = projectBoardState(
           pieceData,
@@ -430,4 +425,3 @@ export const calculateNextGamestate = (
         };
       })()
     : gameState;
-};
