@@ -167,9 +167,6 @@ const combineChecks = (...moveChecks: MoveCheckBuilder[]): MoveCheckBuilder => (
     move as Move | null
   );
 
-export const flatten = <T>(arr: T[][]) =>
-  arr.reduce((acc, cur) => [...acc, ...cur] as T[]);
-
 const insideBoardAndNotCollide = combineChecks(insideBoard, ifNotCollide);
 
 export const PIECE_MOVE_CHECKS: Record<PieceType, MoveCheck[]> = {
@@ -202,9 +199,10 @@ export const PIECE_MOVE_CHECKS: Record<PieceType, MoveCheck[]> = {
     }),
     {} as Record<PieceType, MoveCheck[]>
   ),
-  rook: flatten(STEP_SETS.directionals.map(unlimited)).map(
-    combineChecks(insideBoardAndNotCollide, ifNotPopulated)
-  ),
+  rook: STEP_SETS.directionals
+    .map(unlimited)
+    .flat()
+    .map(combineChecks(insideBoardAndNotCollide, ifNotPopulated)),
   knight: [
     [STEPS.forwardLeft, STEPS.left],
     [STEPS.forwardLeft, STEPS.forward],
@@ -215,12 +213,13 @@ export const PIECE_MOVE_CHECKS: Record<PieceType, MoveCheck[]> = {
     [STEPS.backwardRight, STEPS.right],
     [STEPS.backwardRight, STEPS.backward],
   ].map(combineChecks(insideBoard, ifNotPopulated)),
-  bishop: flatten(STEP_SETS.diagonals.map(unlimited)).map(
-    combineChecks(insideBoardAndNotCollide, ifNotPopulated)
-  ),
+  bishop: STEP_SETS.diagonals
+    .map(unlimited)
+    .flat()
+    .map(combineChecks(insideBoardAndNotCollide, ifNotPopulated)),
   queen: [
-    ...flatten(STEP_SETS.diagonals.map(unlimited)),
-    ...flatten(STEP_SETS.directionals.map(unlimited)),
+    ...STEP_SETS.diagonals.map(unlimited).flat(),
+    ...STEP_SETS.directionals.map(unlimited).flat(),
   ].map(combineChecks(insideBoardAndNotCollide, ifNotPopulated)),
   king: [
     ...STEP_SETS.diagonals.map((step) => [step]),
@@ -278,8 +277,8 @@ export const INITIAL_GAME_STATE: GameState = {
     ...createPiecePair("white", "rook", [0, 7]),
     ...createPiecePair("white", "knight", [1, 7]),
     ...createPiecePair("white", "bishop", [2, 7]),
-    ...createPiece("white", "queen", [4, 7]),
-    ...createPiece("white", "king", [3, 7]),
+    ...createPiece("white", "queen", [3, 7]),
+    ...createPiece("white", "king", [4, 7]),
   },
   turn: "white",
   winner: null,
@@ -384,7 +383,15 @@ const notPlayingSide = ({ turn }: GameState): Side =>
 
 const checkLose = (gameState: GameState) =>
   getPiecesOfColor(gameState.boardState, notPlayingSide(gameState))
-    .map((pieceData) => getAllowedMoves(pieceData, gameState))
+    .map((pieceData) =>
+      getAllowedMoves(pieceData, gameState).filter((move) =>
+        moveIsAllowed(
+          pieceData,
+          gameState,
+          calculateMove(pieceData.boardPosition)(move)
+        )
+      )
+    )
     .flat().length === 0;
 
 export const calculateNextGamestate = (
@@ -392,6 +399,11 @@ export const calculateNextGamestate = (
   gameState: GameState,
   targetBoardPosition: BoardPosition
 ): GameState => {
+  console.log(
+    getPiecesOfColor(gameState.boardState, notPlayingSide(gameState))
+      .map((pieceData) => getAllowedMoves(pieceData, gameState))
+      .flat()
+  );
   return moveIsAllowed(pieceData, gameState, targetBoardPosition)
     ? (() => {
         const projectedBoardState = projectBoardState(
@@ -408,7 +420,12 @@ export const calculateNextGamestate = (
             },
             notPlayingSide(gameState)
           ),
-          winner: checkLose(gameState) ? gameState.turn : null,
+          winner: checkLose({
+            ...gameState,
+            boardState: projectedBoardState,
+          })
+            ? gameState.turn
+            : null,
           turn: notPlayingSide(gameState),
         };
       })()

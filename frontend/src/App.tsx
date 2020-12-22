@@ -3,7 +3,6 @@ import "./App.css";
 import {
   BoardPosition,
   GameState,
-  flatten,
   boardIdToPosition,
   boardPositionToId,
   Piece,
@@ -11,15 +10,15 @@ import {
   calculateNextGamestate,
 } from "./game";
 
-const BOARD_POSITIONS = flatten(
-  Array(8)
-    .fill({})
-    .map((_, x) =>
-      Array(8)
-        .fill({})
-        .map((_, y) => `${x}${y}`)
-    )
-).map(boardIdToPosition);
+const BOARD_POSITIONS = Array(8)
+  .fill({})
+  .map((_, x) =>
+    Array(8)
+      .fill({})
+      .map((_, y) => `${x}${y}`)
+  )
+  .flat()
+  .map(boardIdToPosition);
 
 const isOdd = (x: number) => !!(x % 2);
 
@@ -98,7 +97,9 @@ const Board: React.FC = () => {
         boardPosition
       );
       setCurrentGameState(nextGameState);
-      if (nextGameState.check) {
+      if (nextGameState.winner) {
+        alert(`Game over! Winner: ${nextGameState.winner}`);
+      } else if (nextGameState.check) {
         alert("Check");
       }
       setActivePiece(null);
