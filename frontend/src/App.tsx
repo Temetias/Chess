@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import "./App.css";
 import {
   BoardPosition,
   GameState,
   boardIdToPosition,
-  boardPositionToId,
   Piece,
   INITIAL_GAME_STATE,
   calculateNextGamestate,
@@ -23,8 +22,8 @@ const BOARD_POSITIONS = Array(8)
 const isOdd = (x: number) => !!(x % 2);
 
 const boardPositionToCssPosition = (boardPosition: BoardPosition) => ({
-  left: `${(boardPosition[0] / 8) * 100}%`,
-  top: `${(boardPosition[1] / 8) * 100}%`,
+  left: `${(boardPosition.value()[0] / 8) * 100}%`,
+  top: `${(boardPosition.value()[1] / 8) * 100}%`,
 });
 
 const BoardPiece: React.FC<
@@ -56,7 +55,9 @@ const BoardSquare: React.FC<{
 }> = ({ boardPosition, onClick }) => (
   <div
     className={`Board-square ${
-      isOdd(boardPosition[0] + boardPosition[1]) ? "black" : "white"
+      isOdd(boardPosition.value()[0] + boardPosition.value()[1])
+        ? "black"
+        : "white"
     }`}
     onClick={() => onClick(boardPosition)}
     style={boardPositionToCssPosition(boardPosition)}
@@ -120,7 +121,7 @@ const Board: React.FC = () => {
       <div className="Board">
         {BOARD_POSITIONS.map((boardPosition) => (
           <BoardSquare
-            key={boardPositionToId(boardPosition)}
+            key={boardPosition.toId()}
             boardPosition={boardPosition}
             onClick={onBoardSquareClick}
           />

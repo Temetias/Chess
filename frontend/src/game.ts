@@ -4,7 +4,7 @@ type StepBase = 0 | 1 | -1;
 
 type Step = [StepBase, StepBase];
 
-export type Move = Step[];
+type Move = Step[];
 
 type PieceType =
   | "pawn white"
@@ -15,11 +15,27 @@ type PieceType =
   | "queen"
   | "king";
 
-export type Side = "white" | "black";
+type Side = "white" | "black";
 
 type BoardCoordinate = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-export type BoardPosition = [BoardCoordinate, BoardCoordinate];
+export const createBoardPosition = (
+  x: BoardCoordinate,
+  y: BoardCoordinate
+) => ({
+  value: () => [x, y],
+  toId: () => `${x}${y}`,
+  map: (
+    f: (
+      pos: [BoardCoordinate, BoardCoordinate]
+    ) => [BoardCoordinate, BoardCoordinate]
+  ) => {
+    const [computedX, computedY] = f([x, y]);
+    return createBoardPosition(computedX, computedY);
+  },
+});
+
+export type BoardPosition = ReturnType<typeof createBoardPosition>;
 
 export type Piece = {
   id: string;
@@ -63,7 +79,7 @@ const STEP_SETS = {
   ] as Step[],
 };
 
-export type PieceData = {
+type PieceData = {
   boardPosition: BoardPosition;
   side: Side;
   type: PieceType;
@@ -75,36 +91,39 @@ type MoveCheck = (
 
 type MoveCheckBuilder = (move: Move) => MoveCheck;
 
-const calculateStep = ([xStep, yStep]: Step) => ([
-  xPos,
-  yPos,
-]: BoardPosition): BoardPosition => [
-  (xPos + xStep) as BoardCoordinate,
-  (yPos + yStep) as BoardCoordinate,
-];
+const calculateStep = ([xStep, yStep]: Step) => (
+  boardPosition: BoardPosition
+): BoardPosition => {
+  const [xPos, yPos] = boardPosition.value();
+  return createBoardPosition(
+    (xPos + xStep) as BoardCoordinate,
+    (yPos + yStep) as BoardCoordinate
+  );
+};
 
 const calculateMove = (boardPosition: BoardPosition) => (
   move: Move
 ): BoardPosition =>
   move.reduce((acc, cur) => calculateStep(cur)(acc), boardPosition);
 
-export const boardPositionToId = ([x, y]: BoardPosition) => `${x}${y}`;
-
 export const boardIdToPosition = ([x, y]: string) =>
-  [parseInt(x), parseInt(y)] as BoardPosition;
+  createBoardPosition(
+    parseInt(x) as BoardCoordinate,
+    parseInt(y) as BoardCoordinate
+  );
 
 const ifIsFirstMove = (move: Move) => ({ boardState }: GameState) => ({
   boardPosition,
 }: PieceData) =>
-  boardState[boardPositionToId(boardPosition)] &&
-  !boardState[boardPositionToId(boardPosition)]?.hasMoved
+  boardState[boardPosition.toId()] &&
+  !boardState[boardPosition.toId()]?.hasMoved
     ? move
     : null;
 
 const getTargetPiece = ({ boardState }: GameState) => ({
   boardPosition,
 }: PieceData) => (move: Move) =>
-  boardState[boardPositionToId(calculateMove(boardPosition)(move))];
+  boardState[calculateMove(boardPosition)(move).toId()];
 
 const ifEats = (move: Move) => (gameState: GameState) => (
   pieceData: PieceData
@@ -129,14 +148,10 @@ const unlimited = (step: Step): Move[] =>
 const ifNotCollide = (move: Move) => ({ boardState }: GameState) => ({
   boardPosition,
 }: PieceData): Move | null => {
-  const [xPos, yPos] = boardPosition;
-  let currentBoardPosition: BoardPosition = [xPos, yPos];
+  let currentBoardPosition: BoardPosition = boardPosition;
   for (const [i, step] of move.entries()) {
     currentBoardPosition = calculateStep(step)(currentBoardPosition);
-    if (
-      !!boardState[boardPositionToId(currentBoardPosition)] &&
-      i + 1 < move.length
-    ) {
+    if (!!boardState[currentBoardPosition.toId()] && i + 1 < move.length) {
       return null;
     }
   }
@@ -147,15 +162,14 @@ const ifNotPopulated = (move: Move) => ({ boardState }: GameState) => ({
   boardPosition,
   side,
 }: PieceData) => {
-  const targetPiece =
-    boardState[boardPositionToId(calculateMove(boardPosition)(move))];
+  const targetPiece = boardState[calculateMove(boardPosition)(move).toId()];
   return targetPiece && targetPiece.side === side ? null : move;
 };
 
-const insideBoard = (move: Move) => (_: GameState) => ({
+const ifInsideBoard = (move: Move) => (_: GameState) => ({
   boardPosition,
 }: PieceData): Move | null => {
-  const [xTarget, yTarget] = calculateMove(boardPosition)(move);
+  const [xTarget, yTarget] = calculateMove(boardPosition)(move).value();
   return xTarget > 7 || yTarget > 7 || xTarget < 0 || yTarget < 0 ? null : move;
 };
 
@@ -167,7 +181,11 @@ const combineChecks = (...moveChecks: MoveCheckBuilder[]): MoveCheckBuilder => (
     move as Move | null
   );
 
-const insideBoardAndNotCollide = combineChecks(insideBoard, ifNotCollide);
+const ifInsideBoardAndNotCollide = combineChecks(
+  ifInsideBoard,
+  ifNotCollide,
+  ifNotPopulated
+);
 
 export const PIECE_MOVE_CHECKS: Record<PieceType, MoveCheck[]> = {
   ...["black", "white"].reduce(
@@ -177,23 +195,21 @@ export const PIECE_MOVE_CHECKS: Record<PieceType, MoveCheck[]> = {
         combineChecks(
           ifNotEats,
           ifIsFirstMove,
-          insideBoardAndNotCollide,
-          ifNotPopulated
+          ifInsideBoardAndNotCollide
         )(twice(STEPS[cur === "black" ? "forward" : "backward"])),
         combineChecks(
           ifNotEats,
-          insideBoardAndNotCollide,
+          ifInsideBoardAndNotCollide,
           ifNotPopulated
         )([STEPS[cur === "black" ? "forward" : "backward"]]),
         combineChecks(
           ifEats,
-          insideBoardAndNotCollide,
+          ifInsideBoardAndNotCollide,
           ifNotPopulated
         )([STEPS[cur === "black" ? "forwardLeft" : "backwardLeft"]]),
         combineChecks(
           ifEats,
-          insideBoardAndNotCollide,
-          ifNotPopulated
+          ifInsideBoardAndNotCollide
         )([STEPS[cur === "black" ? "forwardRight" : "backwardRight"]]),
       ],
     }),
@@ -202,7 +218,7 @@ export const PIECE_MOVE_CHECKS: Record<PieceType, MoveCheck[]> = {
   rook: STEP_SETS.directionals
     .map(unlimited)
     .flat()
-    .map(combineChecks(insideBoardAndNotCollide, ifNotPopulated)),
+    .map(ifInsideBoardAndNotCollide),
   knight: [
     [STEPS.forwardLeft, STEPS.left],
     [STEPS.forwardLeft, STEPS.forward],
@@ -212,32 +228,36 @@ export const PIECE_MOVE_CHECKS: Record<PieceType, MoveCheck[]> = {
     [STEPS.backwardLeft, STEPS.backward],
     [STEPS.backwardRight, STEPS.right],
     [STEPS.backwardRight, STEPS.backward],
-  ].map(combineChecks(insideBoard, ifNotPopulated)),
+  ].map(combineChecks(ifInsideBoard, ifNotPopulated)),
   bishop: STEP_SETS.diagonals
     .map(unlimited)
     .flat()
-    .map(combineChecks(insideBoardAndNotCollide, ifNotPopulated)),
+    .map(ifInsideBoardAndNotCollide),
   queen: [
     ...STEP_SETS.diagonals.map(unlimited).flat(),
     ...STEP_SETS.directionals.map(unlimited).flat(),
-  ].map(combineChecks(insideBoardAndNotCollide, ifNotPopulated)),
+  ].map(ifInsideBoardAndNotCollide),
   king: [
     ...STEP_SETS.diagonals.map((step) => [step]),
     ...STEP_SETS.directionals.map((step) => [step]),
-  ].map(combineChecks(insideBoardAndNotCollide, ifNotPopulated)),
+  ].map(ifInsideBoardAndNotCollide),
 };
 
-const createPawns = (side: Side, [xPos, yPos]: BoardPosition) =>
+const createPawns = (side: Side, boardPosition: BoardPosition) =>
   Array(4)
     .fill({})
     .reduce(
       (acc, _, i) =>
         ({
           ...acc,
-          ...createPiecePair(side, `pawn ${side}` as PieceType, [
-            (xPos + i) as BoardCoordinate,
-            yPos,
-          ]),
+          ...createPiecePair(
+            side,
+            `pawn ${side}` as PieceType,
+            boardPosition.map(([xPos, yPos]) => [
+              (xPos + i) as BoardCoordinate,
+              yPos,
+            ])
+          ),
         } as GameState["boardState"]),
       {} as GameState["boardState"]
     );
@@ -248,7 +268,7 @@ const createPiece = (
   boardPosition: BoardPosition,
   secondOfPair: boolean = false
 ): GameState["boardState"] => ({
-  [boardPositionToId(boardPosition)]: {
+  [boardPosition.toId()]: {
     hasMoved: false,
     id: `${side}${type}${secondOfPair ? 1 : 0}`,
     type,
@@ -259,26 +279,34 @@ const createPiece = (
 const createPiecePair = (
   side: Side,
   type: PieceType,
-  [xPos, yPos]: BoardPosition
-): GameState["boardState"] => ({
-  ...createPiece(side, type, [xPos, yPos]),
-  ...createPiece(side, type, [(7 - xPos) as BoardCoordinate, yPos], true),
-});
+  boardPosition: BoardPosition
+): GameState["boardState"] => {
+  const [xPos, yPos] = boardPosition.value();
+  return {
+    ...createPiece(side, type, boardPosition),
+    ...createPiece(
+      side,
+      type,
+      createBoardPosition((7 - xPos) as BoardCoordinate, yPos),
+      true
+    ),
+  };
+};
 
 export const INITIAL_GAME_STATE: GameState = {
   boardState: {
-    ...createPawns("black", [0, 1]),
-    ...createPiecePair("black", "rook", [0, 0]),
-    ...createPiecePair("black", "knight", [1, 0]),
-    ...createPiecePair("black", "bishop", [2, 0]),
-    ...createPiece("black", "queen", [3, 0]),
-    ...createPiece("black", "king", [4, 0]),
-    ...createPawns("white", [0, 6]),
-    ...createPiecePair("white", "rook", [0, 7]),
-    ...createPiecePair("white", "knight", [1, 7]),
-    ...createPiecePair("white", "bishop", [2, 7]),
-    ...createPiece("white", "queen", [3, 7]),
-    ...createPiece("white", "king", [4, 7]),
+    ...createPawns("black", createBoardPosition(0, 1)),
+    ...createPiecePair("black", "rook", createBoardPosition(0, 0)),
+    ...createPiecePair("black", "knight", createBoardPosition(1, 0)),
+    ...createPiecePair("black", "bishop", createBoardPosition(2, 0)),
+    ...createPiece("black", "queen", createBoardPosition(3, 0)),
+    ...createPiece("black", "king", createBoardPosition(4, 0)),
+    ...createPawns("white", createBoardPosition(0, 6)),
+    ...createPiecePair("white", "rook", createBoardPosition(0, 7)),
+    ...createPiecePair("white", "knight", createBoardPosition(1, 7)),
+    ...createPiecePair("white", "bishop", createBoardPosition(2, 7)),
+    ...createPiece("white", "queen", createBoardPosition(3, 7)),
+    ...createPiece("white", "king", createBoardPosition(4, 7)),
   },
   turn: "white",
   winner: null,
@@ -344,24 +372,21 @@ export const moveIsAllowed = (
     .map(openCheckCheck(gameState, pieceData))
     .filter((move) => !!move) as Move[])
     .map(calculateMove(pieceData.boardPosition))
-    .map(boardPositionToId)
-    .includes(boardPositionToId(targetBoardPosition));
+    .map((boardPosition) => boardPosition.toId())
+    .includes(targetBoardPosition.toId());
 
 const projectBoardState = (
   pieceData: PieceData,
   gameState: GameState,
   targetBoardPosition: BoardPosition
-): GameState["boardState"] => {
-  const currentBoardPositionId = boardPositionToId(pieceData.boardPosition);
-  return {
-    ...gameState.boardState,
-    [boardPositionToId(targetBoardPosition)]: {
-      ...gameState.boardState[currentBoardPositionId]!,
-      hasMoved: true,
-    },
-    [currentBoardPositionId]: undefined,
-  };
-};
+): GameState["boardState"] => ({
+  ...gameState.boardState,
+  [targetBoardPosition.toId()]: {
+    ...gameState.boardState[pieceData.boardPosition.toId()]!,
+    hasMoved: true,
+  },
+  [pieceData.boardPosition.toId()]: undefined,
+});
 
 const getPiecesOfColor = (
   boardState: GameState["boardState"],
